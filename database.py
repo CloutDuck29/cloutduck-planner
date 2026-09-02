@@ -1,7 +1,10 @@
 import aiosqlite
+import os
 
-DB_PATH = "planner.db"
-
+DB_PATH = os.getenv(
+    "DATABASE_PATH",
+    "planner.db",
+)
 
 async def init_db():
     async with aiosqlite.connect(DB_PATH) as db:

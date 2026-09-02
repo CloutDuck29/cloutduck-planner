@@ -1,0 +1,18 @@
+services:
+  cloutduck-planner:
+    image: ghcr.io/cloutduck29/cloutduck-planner:latest
+    container_name: cloutduck-planner
+
+    restart: unless-stopped
+
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN}
+      TIMEZONE: Asia/Omsk
+      OMGTU_GROUP: АТП-261
+      DATABASE_PATH: /app/data/planner.db
+
+    volumes:
+      - cloutduck_data:/app/data
+
+volumes:
+  cloutduck_data:
