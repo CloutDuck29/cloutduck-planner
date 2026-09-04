@@ -30,6 +30,7 @@ async def init_db():
         CREATE TABLE IF NOT EXISTS tasks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
+            Description TEXT,
             task_date TEXT NOT NULL,
             task_time TEXT,
             category TEXT DEFAULT 'Личное',
@@ -57,6 +58,14 @@ async def init_db():
             column[1]
             for column in columns
         }
+
+        if "description" not in column_names:
+            await db.execute(
+                """
+                ALTER TABLE tasks
+                ADD COLUMN description TEXT
+                """
+            )
 
         if "list_id" not in column_names:
             await db.execute(
@@ -88,12 +97,14 @@ async def add_task(
     category: str = "Личное",
     list_id: int | None = None,
     parent_task_id: int | None = None,
+    description: str | None = None,
 ):
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
             """
             INSERT INTO tasks (
                 title,
+                description,
                 task_date,
                 task_time,
                 category,
@@ -251,6 +262,7 @@ async def get_task_by_id(
             SELECT
                 id,
                 title,
+                description,
                 task_date,
                 task_time,
                 category,
@@ -264,6 +276,41 @@ async def get_task_by_id(
         )
 
         return await cursor.fetchone()
+
+async def update_task(
+    task_id: int,
+    title: str,
+    description: str | None,
+    task_date: str,
+    task_time: str | None,
+    category: str,
+    list_id: int | None,
+):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """
+            UPDATE tasks
+            SET
+                title = ?,
+                description = ?,
+                task_date = ?,
+                task_time = ?,
+                category = ?,
+                list_id = ?
+            WHERE id = ?
+            """,
+            (
+                title,
+                description,
+                task_date,
+                task_time,
+                category,
+                list_id,
+                task_id,
+            ),
+        )
+
+        await db.commit()
 
 # =====================================
 # НАСТРОЙКИ БОТА
@@ -494,5 +541,43 @@ async def delete_task(
             """,
             (task_id,),
         )
+
+        await db.commit()
+
+async def ensure_default_task_lists():
+    default_lists = [
+        "Личные",
+        "По учёбе",
+        "Студия",
+    ]
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        for name in default_lists:
+            cursor = await db.execute(
+                """
+                SELECT id
+                FROM task_lists
+                WHERE name = ?
+                  AND parent_id IS NULL
+                LIMIT 1
+                """,
+                (name,),
+            )
+
+            existing = await cursor.fetchone()
+
+            if existing:
+                continue
+
+            await db.execute(
+                """
+                INSERT INTO task_lists (
+                    name,
+                    parent_id
+                )
+                VALUES (?, NULL)
+                """,
+                (name,),
+            )
 
         await db.commit()

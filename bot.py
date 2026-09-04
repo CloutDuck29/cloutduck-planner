@@ -36,6 +36,8 @@ from database import (
     get_task_list_by_id,
     get_child_lists,
     delete_task,
+    ensure_default_task_lists,
+    update_task,
 )
 
 from services.day_plan import get_day_plan
@@ -82,6 +84,22 @@ class AddTaskForm(StatesGroup):
     entering_time = State()
     choosing_list = State()
     entering_title = State()
+
+class ListTaskForm(StatesGroup):
+    entering_title = State()
+    entering_description = State()
+    choosing_date = State()
+    entering_custom_date = State()
+    choosing_time = State()
+    entering_time = State()
+
+
+class EditTaskForm(StatesGroup):
+    entering_title = State()
+    entering_description = State()
+    entering_date = State()
+    entering_time = State()
+
 
 def now():
     return datetime.now(tz)
@@ -799,10 +817,19 @@ async def lists_button_handler(
         if parent_id is not None:
             continue
 
+        button_text = {
+            "Личные": "👤 Личные",
+            "По учёбе": "🎓 По учёбе",
+            "Студия": "🎬 Студия",
+        }.get(
+            name,
+            f"📂 {name}",
+        )
+
         buttons.append(
             [
                 InlineKeyboardButton(
-                    text=f"📂 {name}",
+                    text=button_text,
                     callback_data=(
                         f"openlist:{list_id}"
                     ),
@@ -1068,10 +1095,19 @@ async def back_to_lists_callback(
         if parent_id is not None:
             continue
 
+        button_text = {
+            "Личные": "👤 Личные",
+            "По учёбе": "🎓 По учёбе",
+            "Студия": "🎬 Студия",
+        }.get(
+            name,
+            f"📂 {name}",
+        )
+
         buttons.append(
             [
                 InlineKeyboardButton(
-                    text=f"📂 {name}",
+                    text=button_text,
                     callback_data=(
                         f"openlist:{list_id}"
                     ),
@@ -1096,7 +1132,6 @@ async def back_to_lists_callback(
     )
 
     await callback.answer()
-
 # =====================================
 # СОЗДАТЬ ВЛОЖЕННЫЙ СПИСОК
 # =====================================
@@ -1305,6 +1340,7 @@ async def subtask_handler(
     (
         parent_id,
         parent_title,
+        parent_description,
         parent_date,
         parent_time,
         parent_category,
@@ -2036,6 +2072,699 @@ def setup_scheduler():
         id="tomorrow_plan",
         replace_existing=True,
     )
+# =====================================
+# ДОБАВЛЕНИЕ ЗАДАЧИ ИЗ СПИСКА
+# =====================================
+
+@dp.callback_query(
+    lambda callback:
+    callback.data
+    and callback.data.startswith("listadd:")
+)
+async def list_add_callback(
+    callback: CallbackQuery,
+    state: FSMContext,
+):
+    list_id = int(
+        callback.data.split(":")[1]
+    )
+
+    task_list = await get_task_list_by_id(
+        list_id
+    )
+
+    if not task_list:
+        await callback.answer(
+            "Список не найден"
+        )
+        return
+
+    await state.clear()
+
+    await state.update_data(
+        list_id=list_id
+    )
+
+    await state.set_state(
+        ListTaskForm.entering_title
+    )
+
+    await callback.message.answer(
+        "📝 Напиши название задачи:"
+    )
+
+    await callback.answer()
+
+
+@dp.message(
+    ListTaskForm.entering_title
+)
+async def list_task_title_handler(
+    message: Message,
+    state: FSMContext,
+):
+    title = message.text.strip()
+
+    if not title:
+        await message.answer(
+            "Название не может быть пустым."
+        )
+        return
+
+    await state.update_data(
+        title=title
+    )
+
+    await state.set_state(
+        ListTaskForm.entering_description
+    )
+
+    await message.answer(
+        "📄 Напиши подробное описание.\n\n"
+        "Если описание не нужно — отправь -"
+    )
+
+
+@dp.message(
+    ListTaskForm.entering_description
+)
+async def list_task_description_handler(
+    message: Message,
+    state: FSMContext,
+):
+    description = message.text.strip()
+
+    if description == "-":
+        description = None
+
+    await state.update_data(
+        description=description
+    )
+
+    await state.set_state(
+        ListTaskForm.choosing_date
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📅 Сегодня",
+                    callback_data="listtaskdate:today",
+                ),
+                InlineKeyboardButton(
+                    text="➡️ Завтра",
+                    callback_data="listtaskdate:tomorrow",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🗓 Другая дата",
+                    callback_data="listtaskdate:custom",
+                )
+            ],
+        ]
+    )
+
+    await message.answer(
+        "📅 На какую дату задача?",
+        reply_markup=keyboard,
+    )
+
+
+@dp.callback_query(
+    ListTaskForm.choosing_date,
+    lambda callback:
+    callback.data
+    and callback.data.startswith("listtaskdate:")
+)
+async def list_task_date_callback(
+    callback: CallbackQuery,
+    state: FSMContext,
+):
+    choice = callback.data.split(":")[1]
+
+    if choice == "today":
+        task_date = now().date()
+
+    elif choice == "tomorrow":
+        task_date = (
+            now().date()
+            + timedelta(days=1)
+        )
+
+    else:
+        await state.set_state(
+            ListTaskForm.entering_custom_date
+        )
+
+        await callback.message.answer(
+            "📅 Введи дату в формате:\n"
+            "15.09.2026"
+        )
+
+        await callback.answer()
+        return
+
+    await state.update_data(
+        task_date=task_date.isoformat()
+    )
+
+    await show_list_task_time_choice(
+        callback.message,
+        state,
+    )
+
+    await callback.answer()
+
+
+@dp.message(
+    ListTaskForm.entering_custom_date
+)
+async def list_task_custom_date_handler(
+    message: Message,
+    state: FSMContext,
+):
+    try:
+        task_date = datetime.strptime(
+            message.text.strip(),
+            "%d.%m.%Y",
+        ).date()
+
+    except ValueError:
+        await message.answer(
+            "❌ Неверная дата.\n\n"
+            "Напиши так: 15.09.2026"
+        )
+        return
+
+    await state.update_data(
+        task_date=task_date.isoformat()
+    )
+
+    await show_list_task_time_choice(
+        message,
+        state,
+    )
+
+
+async def show_list_task_time_choice(
+    message: Message,
+    state: FSMContext,
+):
+    await state.set_state(
+        ListTaskForm.choosing_time
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Без времени",
+                    callback_data="listtasktime:none",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🕒 Указать время",
+                    callback_data="listtasktime:custom",
+                )
+            ],
+        ]
+    )
+
+    await message.answer(
+        "🕒 Указать время?",
+        reply_markup=keyboard,
+    )
+
+
+@dp.callback_query(
+    ListTaskForm.choosing_time,
+    lambda callback:
+    callback.data
+    and callback.data.startswith("listtasktime:")
+)
+async def list_task_time_callback(
+    callback: CallbackQuery,
+    state: FSMContext,
+):
+    choice = callback.data.split(":")[1]
+
+    if choice == "custom":
+        await state.set_state(
+            ListTaskForm.entering_time
+        )
+
+        await callback.message.answer(
+            "🕒 Введи время в формате:\n"
+            "18:30"
+        )
+
+        await callback.answer()
+        return
+
+    await save_list_task(
+        callback.message,
+        state,
+        task_time=None,
+    )
+
+    await callback.answer()
+
+
+@dp.message(
+    ListTaskForm.entering_time
+)
+async def list_task_custom_time_handler(
+    message: Message,
+    state: FSMContext,
+):
+    try:
+        parsed_time = datetime.strptime(
+            message.text.strip(),
+            "%H:%M",
+        )
+
+        task_time = parsed_time.strftime(
+            "%H:%M"
+        )
+
+    except ValueError:
+        await message.answer(
+            "❌ Неверное время.\n\n"
+            "Напиши так: 18:30"
+        )
+        return
+
+    await save_list_task(
+        message,
+        state,
+        task_time=task_time,
+    )
+
+
+async def save_list_task(
+    message: Message,
+    state: FSMContext,
+    task_time: str | None,
+):
+    data = await state.get_data()
+
+    list_id = data["list_id"]
+
+    task_list = await get_task_list_by_id(
+        list_id
+    )
+
+    list_name = task_list[1]
+
+    category = {
+        "Личные": "Личное",
+        "По учёбе": "Учёба",
+        "Студия": "Студия",
+    }.get(
+        list_name,
+        list_name,
+    )
+
+    task_id = await add_task(
+        title=data["title"],
+        description=data.get("description"),
+        task_date=data["task_date"],
+        task_time=task_time,
+        category=category,
+        list_id=list_id,
+    )
+
+    description = data.get(
+        "description"
+    )
+
+    text = (
+        "✅ Задача создана\n\n"
+        f"📌 {data['title']}\n"
+        f"📅 {data['task_date']}\n"
+    )
+
+    if task_time:
+        text += f"🕒 {task_time}\n"
+
+    if description:
+        text += (
+            f"\n📄 {description}\n"
+        )
+
+    text += f"\n📂 {list_name}"
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📌 Открыть задачу",
+                    callback_data=(
+                        f"opentask:{task_id}:{list_id}"
+                    ),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ К списку",
+                    callback_data=(
+                        f"openlist:{list_id}"
+                    ),
+                )
+            ],
+        ]
+    )
+
+    await state.clear()
+
+    await message.answer(
+        text,
+        reply_markup=keyboard,
+    )
+# =====================================
+# КАРТОЧКА ЗАДАЧИ
+# =====================================
+
+@dp.callback_query(
+    lambda callback:
+    callback.data
+    and callback.data.startswith("opentask:")
+)
+async def open_task_callback(
+    callback: CallbackQuery,
+):
+    _, task_id_str, list_id_str = (
+        callback.data.split(":")
+    )
+
+    task_id = int(task_id_str)
+    list_id = int(list_id_str)
+
+    task = await get_task_by_id(
+        task_id
+    )
+
+    if not task:
+        await callback.answer(
+            "Задача не найдена"
+        )
+        return
+
+    (
+        task_id,
+        title,
+        description,
+        task_date,
+        task_time,
+        category,
+        is_done,
+        task_list_id,
+        parent_task_id,
+    ) = task
+
+    status = (
+        "✅ Выполнено"
+        if is_done
+        else "⏳ Не выполнено"
+    )
+
+    try:
+        formatted_date = datetime.strptime(
+            task_date,
+            "%Y-%m-%d",
+        ).strftime("%d.%m.%Y")
+    except ValueError:
+        formatted_date = task_date
+
+    text = (
+        f"📌 {title}\n\n"
+        f"{status}\n"
+        f"📅 {formatted_date}\n"
+    )
+
+    if task_time:
+        text += f"🕒 {task_time}\n"
+
+    if description:
+        text += (
+            "\n"
+            f"📄 {description}\n"
+        )
+
+    buttons = []
+
+    if not is_done:
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text="✅ Выполнить",
+                    callback_data=(
+                        f"taskdone:{task_id}:{list_id}"
+                    ),
+                )
+            ]
+        )
+
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="✏️ Редактировать",
+                callback_data=(
+                    f"taskedit:{task_id}:{list_id}"
+                ),
+            )
+        ]
+    )
+
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="🗑 Удалить",
+                callback_data=(
+                    f"taskdelete:{task_id}:{list_id}"
+                ),
+            )
+        ]
+    )
+
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ Назад",
+                callback_data=(
+                    f"openlist:{list_id}"
+                ),
+            )
+        ]
+    )
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=buttons
+        ),
+    )
+
+    await callback.answer()
+
+
+# =====================================
+# ВЫПОЛНИТЬ ЗАДАЧУ ИЗ СПИСКА
+# =====================================
+
+@dp.callback_query(
+    lambda callback:
+    callback.data
+    and callback.data.startswith("taskdone:")
+)
+async def task_done_callback(
+    callback: CallbackQuery,
+):
+    _, task_id_str, list_id_str = (
+        callback.data.split(":")
+    )
+
+    task_id = int(task_id_str)
+    list_id = int(list_id_str)
+
+    await mark_task_done(
+        task_id
+    )
+
+    task = await get_task_by_id(
+        task_id
+    )
+
+    if not task:
+        await callback.answer()
+        return
+
+    (
+        task_id,
+        title,
+        description,
+        task_date,
+        task_time,
+        category,
+        is_done,
+        task_list_id,
+        parent_task_id,
+    ) = task
+
+    try:
+        formatted_date = datetime.strptime(
+            task_date,
+            "%Y-%m-%d",
+        ).strftime("%d.%m.%Y")
+    except ValueError:
+        formatted_date = task_date
+
+    text = (
+        f"📌 {title}\n\n"
+        "✅ Выполнено\n"
+        f"📅 {formatted_date}\n"
+    )
+
+    if task_time:
+        text += f"🕒 {task_time}\n"
+
+    if description:
+        text += (
+            "\n"
+            f"📄 {description}\n"
+        )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✏️ Редактировать",
+                    callback_data=(
+                        f"taskedit:{task_id}:{list_id}"
+                    ),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🗑 Удалить",
+                    callback_data=(
+                        f"taskdelete:{task_id}:{list_id}"
+                    ),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад",
+                    callback_data=(
+                        f"openlist:{list_id}"
+                    ),
+                )
+            ],
+        ]
+    )
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=keyboard,
+    )
+
+    await callback.answer(
+        "✅ Выполнено"
+    )
+
+
+# =====================================
+# УДАЛЕНИЕ ЗАДАЧИ
+# =====================================
+
+@dp.callback_query(
+    lambda callback:
+    callback.data
+    and callback.data.startswith("taskdelete:")
+)
+async def task_delete_callback(
+    callback: CallbackQuery,
+):
+    _, task_id_str, list_id_str = (
+        callback.data.split(":")
+    )
+
+    task_id = int(task_id_str)
+    list_id = int(list_id_str)
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🗑 Да, удалить",
+                    callback_data=(
+                        f"taskdeleteconfirm:"
+                        f"{task_id}:{list_id}"
+                    ),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Отмена",
+                    callback_data=(
+                        f"opentask:{task_id}:{list_id}"
+                    ),
+                )
+            ],
+        ]
+    )
+
+    await callback.message.edit_text(
+        "🗑 Точно удалить задачу?",
+        reply_markup=keyboard,
+    )
+
+    await callback.answer()
+
+
+@dp.callback_query(
+    lambda callback:
+    callback.data
+    and callback.data.startswith(
+        "taskdeleteconfirm:"
+    )
+)
+async def task_delete_confirm_callback(
+    callback: CallbackQuery,
+):
+    _, task_id_str, list_id_str = (
+        callback.data.split(":")
+    )
+
+    task_id = int(task_id_str)
+    list_id = int(list_id_str)
+
+    await delete_task(
+        task_id
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⬅️ К списку",
+                    callback_data=(
+                        f"openlist:{list_id}"
+                    ),
+                )
+            ]
+        ]
+    )
+
+    await callback.message.edit_text(
+        "✅ Задача удалена.",
+        reply_markup=keyboard,
+    )
+
+    await callback.answer()
 
 # =====================================
 # START BOT
@@ -2043,7 +2772,7 @@ def setup_scheduler():
 
 async def main():
     await init_db()
-
+    await ensure_default_task_lists()
     await init_bot_settings()
     await init_sent_notifications()
     await init_omgtu_snapshot()
