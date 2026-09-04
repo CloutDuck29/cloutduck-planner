@@ -68,28 +68,26 @@ async def fetch_group_schedule(
 
 
 def is_our_subgroup(lesson: dict) -> bool:
-    """
-    Учитываем:
-    - 1 подгруппу
-    - пары без подгруппы
-
-    Игнорируем:
-    - 2 подгруппу
-    """
-
     subgroup = lesson.get("subGroup")
 
-    # Общая пара / лекция
-    if subgroup is None:
-        return True
+    if subgroup is not None:
+        subgroup_text = str(subgroup).strip()
 
-    subgroup_text = str(subgroup).strip()
+        if subgroup_text and not subgroup_text.endswith("/1"):
+            return False
 
-    if subgroup_text == "":
-        return True
+    # Убираем немецкий поток иностранного языка
+    discipline = str(lesson.get("discipline") or "").lower()
 
-    # АТП-261/1 или МР-261/1
-    return subgroup_text.endswith("/1")
+    lesson_text = " ".join(
+        str(value or "")
+        for value in lesson.values()
+    ).lower()
+
+    if "иностранный язык" in discipline and "нем яз" in lesson_text:
+        return False
+
+    return True
 
 
 async def get_week_schedule(
