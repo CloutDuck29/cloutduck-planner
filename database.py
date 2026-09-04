@@ -111,10 +111,11 @@ async def add_task(
                 list_id,
                 parent_task_id
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 title,
+                description,
                 task_date,
                 task_time,
                 category,
