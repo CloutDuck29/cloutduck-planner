@@ -58,6 +58,20 @@ def get_building_text(
 # ПЛАН ДНЯ
 # =====================================
 
+def get_lesson_number(begin_time: str) -> str:
+    lesson_numbers = {
+        "08:00": "1️⃣",
+        "09:40": "2️⃣",
+        "11:35": "3️⃣",
+        "13:15": "4️⃣",
+        "15:00": "5️⃣",
+        "16:40": "6️⃣",
+        "18:20": "7️⃣",
+        "20:00": "8️⃣",
+    }
+
+    return lesson_numbers.get(begin_time, "▫️")
+
 async def get_day_plan(
     target_day: date,
 ) -> str:
@@ -104,6 +118,8 @@ async def get_day_plan(
                 "beginLesson"
             ]
 
+            lesson_number = get_lesson_number(start)
+
             end = lesson[
                 "endLesson"
             ]
@@ -113,7 +129,7 @@ async def get_day_plan(
             ]
 
             lines.append(
-                f"{start}–{end} — "
+                f"{lesson_number} {start}–{end} — "
                 f"{subject}"
             )
 
