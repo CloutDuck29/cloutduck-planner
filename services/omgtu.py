@@ -68,24 +68,26 @@ async def fetch_group_schedule(
 
 
 def is_our_subgroup(lesson: dict) -> bool:
-    subgroup = lesson.get("subGroup")
-
-    if subgroup is not None:
-        subgroup_text = str(subgroup).strip()
-
-        if subgroup_text and not subgroup_text.endswith("/1"):
-            return False
-
-    # Убираем немецкий поток иностранного языка
-    discipline = str(lesson.get("discipline") or "").lower()
-
+    # Собираем всю информацию о паре в одну строку
     lesson_text = " ".join(
         str(value or "")
         for value in lesson.values()
-    ).lower()
+    ).upper()
 
-    if "иностранный язык" in discipline and "нем яз" in lesson_text:
+    # Немецкий поток нам не нужен
+    if "НЕМ ЯЗ" in lesson_text:
         return False
+
+    # Вторая подгруппа нам не нужна
+    if "АТП-261/2" in lesson_text:
+        return False
+
+    # Если API отдельно передал подгруппу
+    subgroup = str(lesson.get("subGroup") or "").strip()
+
+    if subgroup:
+        if subgroup.endswith("/2") or subgroup == "2":
+            return False
 
     return True
 
