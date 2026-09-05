@@ -490,12 +490,6 @@ async def show_list_choice(
     callback.data
     and callback.data.startswith("tasklist:")
 )
-@dp.callback_query(
-    AddTaskForm.choosing_list,
-    lambda callback:
-    callback.data
-    and callback.data.startswith("tasklist:")
-)
 async def choose_task_list(
     callback: CallbackQuery,
     state: FSMContext,
@@ -2970,6 +2964,358 @@ async def task_done_callback(
         "✅ Выполнено"
     )
 
+# =====================================
+# РЕДАКТИРОВАНИЕ ЗАДАЧИ
+# =====================================
+
+@dp.callback_query(
+    lambda callback:
+    callback.data
+    and callback.data.startswith("taskedit:")
+)
+async def task_edit_callback(
+    callback: CallbackQuery,
+):
+    _, task_id_str, list_id_str = (
+        callback.data.split(":")
+    )
+
+    task_id = int(task_id_str)
+    list_id = int(list_id_str)
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📝 Название",
+                    callback_data=(
+                        f"taskeditfield:title:"
+                        f"{task_id}:{list_id}"
+                    ),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📄 Описание",
+                    callback_data=(
+                        f"taskeditfield:description:"
+                        f"{task_id}:{list_id}"
+                    ),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📅 Дата",
+                    callback_data=(
+                        f"taskeditfield:date:"
+                        f"{task_id}:{list_id}"
+                    ),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🕒 Время",
+                    callback_data=(
+                        f"taskeditfield:time:"
+                        f"{task_id}:{list_id}"
+                    ),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад",
+                    callback_data=(
+                        f"opentask:{task_id}:{list_id}"
+                    ),
+                )
+            ],
+        ]
+    )
+
+    await callback.message.edit_text(
+        "✏️ Что изменить?",
+        reply_markup=keyboard,
+    )
+
+    await callback.answer()
+
+
+@dp.callback_query(
+    lambda callback:
+    callback.data
+    and callback.data.startswith(
+        "taskeditfield:"
+    )
+)
+async def task_edit_field_callback(
+    callback: CallbackQuery,
+    state: FSMContext,
+):
+    parts = callback.data.split(":")
+
+    field = parts[1]
+    task_id = int(parts[2])
+    list_id = int(parts[3])
+
+    await state.clear()
+
+    await state.update_data(
+        task_id=task_id,
+        list_id=list_id,
+    )
+
+    if field == "title":
+        await state.set_state(
+            EditTaskForm.entering_title
+        )
+
+        text = "📝 Напиши новое название:"
+
+    elif field == "description":
+        await state.set_state(
+            EditTaskForm.entering_description
+        )
+
+        text = (
+            "📄 Напиши новое описание.\n\n"
+            "Чтобы удалить описание — отправь -"
+        )
+
+    elif field == "date":
+        await state.set_state(
+            EditTaskForm.entering_date
+        )
+
+        text = (
+            "📅 Напиши новую дату:\n"
+            "15.09.2026"
+        )
+
+    else:
+        await state.set_state(
+            EditTaskForm.entering_time
+        )
+
+        text = (
+            "🕒 Напиши новое время:\n"
+            "18:30\n\n"
+            "Чтобы убрать время — отправь -"
+        )
+
+    await callback.message.answer(text)
+    await callback.answer()
+
+
+async def save_edited_task_field(
+    state: FSMContext,
+    **changes,
+):
+    data = await state.get_data()
+
+    task_id = data["task_id"]
+
+    task = await get_task_by_id(
+        task_id
+    )
+
+    if not task:
+        return None
+
+    (
+        task_id,
+        title,
+        description,
+        task_date,
+        task_time,
+        category,
+        is_done,
+        list_id,
+        parent_task_id,
+    ) = task
+
+    await update_task(
+        task_id=task_id,
+        title=changes.get(
+            "title",
+            title,
+        ),
+        description=changes.get(
+            "description",
+            description,
+        ),
+        task_date=changes.get(
+            "task_date",
+            task_date,
+        ),
+        task_time=changes.get(
+            "task_time",
+            task_time,
+        ),
+        category=category,
+        list_id=list_id,
+    )
+
+    return (
+        task_id,
+        list_id,
+    )
+
+
+async def send_edit_success(
+    message: Message,
+    state: FSMContext,
+    result,
+):
+    if not result:
+        await message.answer(
+            "❌ Задача не найдена."
+        )
+        await state.clear()
+        return
+
+    task_id, list_id = result
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📌 Открыть задачу",
+                    callback_data=(
+                        f"opentask:{task_id}:{list_id}"
+                    ),
+                )
+            ]
+        ]
+    )
+
+    await message.answer(
+        "✅ Задача обновлена.",
+        reply_markup=keyboard,
+    )
+
+    await state.clear()
+
+
+@dp.message(
+    EditTaskForm.entering_title
+)
+async def edit_task_title_handler(
+    message: Message,
+    state: FSMContext,
+):
+    title = message.text.strip()
+
+    if not title:
+        await message.answer(
+            "Название не может быть пустым."
+        )
+        return
+
+    result = await save_edited_task_field(
+        state,
+        title=title,
+    )
+
+    await send_edit_success(
+        message,
+        state,
+        result,
+    )
+
+
+@dp.message(
+    EditTaskForm.entering_description
+)
+async def edit_task_description_handler(
+    message: Message,
+    state: FSMContext,
+):
+    description = message.text.strip()
+
+    if description == "-":
+        description = None
+
+    result = await save_edited_task_field(
+        state,
+        description=description,
+    )
+
+    await send_edit_success(
+        message,
+        state,
+        result,
+    )
+
+
+@dp.message(
+    EditTaskForm.entering_date
+)
+async def edit_task_date_handler(
+    message: Message,
+    state: FSMContext,
+):
+    try:
+        task_date = datetime.strptime(
+            message.text.strip(),
+            "%d.%m.%Y",
+        ).date()
+
+    except ValueError:
+        await message.answer(
+            "❌ Неверная дата.\n"
+            "Напиши так: 15.09.2026"
+        )
+        return
+
+    result = await save_edited_task_field(
+        state,
+        task_date=task_date.isoformat(),
+    )
+
+    await send_edit_success(
+        message,
+        state,
+        result,
+    )
+
+
+@dp.message(
+    EditTaskForm.entering_time
+)
+async def edit_task_time_handler(
+    message: Message,
+    state: FSMContext,
+):
+    text = message.text.strip()
+
+    if text == "-":
+        task_time = None
+
+    else:
+        try:
+            task_time = datetime.strptime(
+                text,
+                "%H:%M",
+            ).strftime("%H:%M")
+
+        except ValueError:
+            await message.answer(
+                "❌ Неверное время.\n"
+                "Напиши так: 18:30\n\n"
+                "Или - чтобы убрать время."
+            )
+            return
+
+    result = await save_edited_task_field(
+        state,
+        task_time=task_time,
+    )
+
+    await send_edit_success(
+        message,
+        state,
+        result,
+    )
 
 # =====================================
 # УДАЛЕНИЕ ЗАДАЧИ
