@@ -121,24 +121,13 @@ main_keyboard = ReplyKeyboardMarkup(
         ],
         [
             KeyboardButton(
-                text="🗓 Неделя"
+                text="🗓 Недели"
             ),
             KeyboardButton(
-                text="⏭ Следующая неделя"
+                text="👨 Брат"
             ),
         ],
         [
-            KeyboardButton(
-                text="👨 Брат сегодня"
-            ),
-            KeyboardButton(
-                text="👨 Брат неделя"
-            ),
-        ],
-        [
-            KeyboardButton(
-                text="➕ Добавить задачу"
-            ),
             KeyboardButton(
                 text="📂 Списки"
             ),
@@ -907,92 +896,303 @@ async def open_list_callback(
         current_list_id
     )
 
-    child_lists = await get_child_lists(
-        current_list_id
+    today = now().date()
+    tomorrow = (
+        today
+        + timedelta(days=1)
     )
+
+    active_tasks = [
+        task
+        for task in tasks
+        if (
+            task[5] is None
+            and not task[4]
+        )
+    ]
+
+    done_tasks = [
+        task
+        for task in tasks
+        if (
+            task[5] is None
+            and task[4]
+        )
+    ]
+
+    today_count = 0
+    tomorrow_count = 0
+    overdue_count = 0
+    upcoming_count = 0
+
+    for task in active_tasks:
+        try:
+            task_date = datetime.strptime(
+                task[2],
+                "%Y-%m-%d",
+            ).date()
+
+        except ValueError:
+            continue
+
+        if task_date == today:
+            today_count += 1
+
+        elif task_date == tomorrow:
+            tomorrow_count += 1
+
+        elif task_date < today:
+            overdue_count += 1
+
+        elif task_date > tomorrow:
+            upcoming_count += 1
+
+    icon = {
+        "Личные": "👤",
+        "По учёбе": "🎓",
+        "Студия": "🎬",
+    }.get(
+        list_name,
+        "📂",
+    )
+
+    text = (
+        f"{icon} {list_name}\n\n"
+        f"🔥 Сегодня — {today_count}\n"
+        f"➡️ Завтра — {tomorrow_count}\n"
+        f"⚠️ Просроченные — {overdue_count}\n"
+        f"📅 Предстоящие — {upcoming_count}\n"
+        f"✅ Выполненные — {len(done_tasks)}"
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"🔥 Сегодня · {today_count}",
+                    callback_data=(
+                        f"listview:{list_id}:today:0"
+                    ),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"➡️ Завтра · {tomorrow_count}",
+                    callback_data=(
+                        f"listview:{list_id}:tomorrow:0"
+                    ),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=(
+                        f"⚠️ Просроченные · "
+                        f"{overdue_count}"
+                    ),
+                    callback_data=(
+                        f"listview:{list_id}:overdue:0"
+                    ),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=(
+                        f"📅 Предстоящие · "
+                        f"{upcoming_count}"
+                    ),
+                    callback_data=(
+                        f"listview:{list_id}:upcoming:0"
+                    ),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=(
+                        f"✅ Выполненные · "
+                        f"{len(done_tasks)}"
+                    ),
+                    callback_data=(
+                        f"listview:{list_id}:done:0"
+                    ),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="➕ Добавить задачу",
+                    callback_data=(
+                        f"listadd:{list_id}"
+                    ),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Ко всем спискам",
+                    callback_data="backtolists",
+                )
+            ],
+        ]
+    )
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=keyboard,
+    )
+
+    await callback.answer()
+
+@dp.callback_query(
+    lambda callback:
+    callback.data
+    and callback.data.startswith("listview:")
+)
+async def list_view_callback(
+    callback: CallbackQuery,
+):
+    parts = callback.data.split(":")
+
+    list_id = int(parts[1])
+    view = parts[2]
+    page = int(parts[3])
+
+    task_list = await get_task_list_by_id(
+        list_id
+    )
+
+    if not task_list:
+        await callback.answer(
+            "Список не найден"
+        )
+        return
+
+    list_name = task_list[1]
+
+    tasks = await get_tasks_for_list(
+        list_id
+    )
+
+    today = now().date()
+    tomorrow = today + timedelta(days=1)
+
+    filtered = []
+
+    for task in tasks:
+        (
+            task_id,
+            title,
+            task_date_text,
+            task_time,
+            is_done,
+            parent_task_id,
+        ) = task
+
+        if parent_task_id is not None:
+            continue
+
+        try:
+            task_date = datetime.strptime(
+                task_date_text,
+                "%Y-%m-%d",
+            ).date()
+        except ValueError:
+            continue
+
+        if view == "today":
+            matches = (
+                not is_done
+                and task_date == today
+            )
+
+        elif view == "tomorrow":
+            matches = (
+                not is_done
+                and task_date == tomorrow
+            )
+
+        elif view == "overdue":
+            matches = (
+                not is_done
+                and task_date < today
+            )
+
+        elif view == "upcoming":
+            matches = (
+                not is_done
+                and task_date > tomorrow
+            )
+
+        elif view == "done":
+            matches = bool(is_done)
+
+        else:
+            matches = False
+
+        if matches:
+            filtered.append(task)
+
+    filtered.sort(
+        key=lambda task: (
+            task[2],
+            task[3] or "99:99",
+            task[0],
+        )
+    )
+
+    if view == "done":
+        filtered.reverse()
+
+    page_size = 10
+
+    start = page * page_size
+    end = start + page_size
+
+    page_tasks = filtered[
+        start:end
+    ]
+
+    titles = {
+        "today": "🔥 Сегодня",
+        "tomorrow": "➡️ Завтра",
+        "overdue": "⚠️ Просроченные",
+        "upcoming": "📅 Предстоящие",
+        "done": "✅ Выполненные",
+    }
 
     lines = [
         f"📂 {list_name}",
+        f"{titles[view]}",
         "",
     ]
 
-    top_level_tasks = [
-        task
-        for task in tasks
-        if task[5] is None
-    ]
-
-    if not top_level_tasks:
-        lines.append(
-            "Задач пока нет."
-        )
-    else:
-        lines.append(
-            "📌 ЗАДАЧИ"
-        )
-
-        for task in top_level_tasks:
-            (
-                task_id,
-                title,
-                task_date,
-                task_time,
-                is_done,
-                parent_task_id,
-            ) = task
-
-            status = (
-                "✅"
-                if is_done
-                else "☐"
-            )
-
-            time_text = (
-                f" {task_time}"
-                if task_time
-                else ""
-            )
-
-            lines.append(
-                f"{status} #{task_id} "
-                f"{task_date}{time_text} — "
-                f"{title}"
-            )
-
-            subtasks = [
-                subtask
-                for subtask in tasks
-                if subtask[5] == task_id
-            ]
-
-            for subtask in subtasks:
-                (
-                    subtask_id,
-                    subtask_title,
-                    subtask_date,
-                    subtask_time,
-                    subtask_done,
-                    subtask_parent,
-                ) = subtask
-
-                subtask_status = (
-                    "✅"
-                    if subtask_done
-                    else "☐"
-                )
-
-                lines.append(
-                    f"   ↳ {subtask_status} "
-                    f"#{subtask_id} "
-                    f"{subtask_title}"
-                )
-
     buttons = []
 
-    for task in top_level_tasks:
-        task_id = task[0]
-        title = task[1]
-        is_done = task[4]
+    if not page_tasks:
+        lines.append(
+            "Задач здесь нет."
+        )
+
+    for task in page_tasks:
+        (
+            task_id,
+            title,
+            task_date,
+            task_time,
+            is_done,
+            parent_task_id,
+        ) = task
+
+        try:
+            formatted_date = datetime.strptime(
+                task_date,
+                "%Y-%m-%d",
+            ).strftime("%d.%m")
+        except ValueError:
+            formatted_date = task_date
+
+        time_text = (
+            f" · {task_time}"
+            if task_time
+            else ""
+        )
 
         status = (
             "✅"
@@ -1000,78 +1200,62 @@ async def open_list_callback(
             else "☐"
         )
 
+        lines.append(
+            f"{status} {formatted_date}"
+            f"{time_text} — {title}"
+        )
+
         buttons.append(
             [
                 InlineKeyboardButton(
-                    text=(
-                        f"{status} {title}"
-                    ),
+                    text=f"{status} {title}",
                     callback_data=(
-                        f"opentask:{task_id}:"
-                        f"{current_list_id}"
+                        f"opentask:"
+                        f"{task_id}:{list_id}"
                     ),
                 )
             ]
         )
 
-    if child_lists:
-        lines.append("")
-        lines.append(
-            "📁 ВЛОЖЕННЫЕ СПИСКИ"
+    navigation = []
+
+    if page > 0:
+        navigation.append(
+            InlineKeyboardButton(
+                text="⬅️",
+                callback_data=(
+                    f"listview:"
+                    f"{list_id}:{view}:{page - 1}"
+                ),
+            )
         )
 
-        for (
-            child_id,
-            child_name,
-            child_parent_id,
-        ) in child_lists:
-
-            lines.append(
-                f"📁 {child_name}"
+    if end < len(filtered):
+        navigation.append(
+            InlineKeyboardButton(
+                text="➡️",
+                callback_data=(
+                    f"listview:"
+                    f"{list_id}:{view}:{page + 1}"
+                ),
             )
+        )
 
-            buttons.append(
-                [
-                    InlineKeyboardButton(
-                        text=f"📁 {child_name}",
-                        callback_data=(
-                            f"openlist:{child_id}"
-                        ),
-                    )
-                ]
-            )
+    if navigation:
+        buttons.append(
+            navigation
+        )
 
     buttons.append(
         [
             InlineKeyboardButton(
-                text="➕ Добавить задачу",
+                text="⬅️ К разделу",
                 callback_data=(
-                    f"listadd:{current_list_id}"
+                    f"openlist:{list_id}"
                 ),
             )
         ]
     )
-
-    if parent_id is not None:
-        buttons.append(
-            [
-                InlineKeyboardButton(
-                    text="⬅️ Назад",
-                    callback_data=(
-                        f"openlist:{parent_id}"
-                    ),
-                )
-            ]
-        )
-    else:
-        buttons.append(
-            [
-                InlineKeyboardButton(
-                    text="⬅️ Ко всем спискам",
-                    callback_data="backtolists",
-                )
-            ]
-        )
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=buttons
@@ -1083,7 +1267,6 @@ async def open_list_callback(
     )
 
     await callback.answer()
-
 
 # =====================================
 # НАЗАД КО ВСЕМ СПИСКАМ
@@ -1540,6 +1723,34 @@ async def tomorrow_button_handler(
 ):
     await send_tomorrow(message)
 
+@dp.message(
+    lambda message:
+    message.text == "🗓 Недели"
+)
+async def weeks_menu_handler(
+    message: Message,
+):
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🗓 Текущая неделя",
+                    callback_data="weekmenu:current",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⏭ Следующая неделя",
+                    callback_data="weekmenu:next",
+                )
+            ],
+        ]
+    )
+
+    await message.answer(
+        "🗓 Какую неделю показать?",
+        reply_markup=keyboard,
+    )
 
 # =====================================
 # ТЕКУЩАЯ НЕДЕЛЯ
@@ -1573,6 +1784,25 @@ async def send_week(
 
         await message.answer(text)
 
+
+@dp.callback_query(
+    lambda callback:
+    callback.data
+    and callback.data.startswith("weekmenu:")
+)
+async def week_menu_callback(
+    callback: CallbackQuery,
+):
+    choice = callback.data.split(":")[1]
+
+    await callback.answer()
+
+    await send_week(
+        callback.message,
+        next_week=(
+            choice == "next"
+        ),
+    )
 
 @dp.message(Command("week"))
 async def week_handler(
@@ -1628,6 +1858,35 @@ async def nextweek_button_handler(
 # =====================================
 # РАСПИСАНИЕ БРАТА
 # =====================================
+
+@dp.message(
+    lambda message:
+    message.text == "👨 Брат"
+)
+async def brother_menu_handler(
+    message: Message,
+):
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="👨 Брат сегодня",
+                    callback_data="brothermenu:today",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🗓 Брат неделя",
+                    callback_data="brothermenu:week",
+                )
+            ],
+        ]
+    )
+
+    await message.answer(
+        "👨 Что показать?",
+        reply_markup=keyboard,
+    )
 
 WEEKDAYS = {
     0: "Понедельник",
@@ -1782,6 +2041,28 @@ async def send_brother_week(
 
         await message.answer(text)
 
+@dp.callback_query(
+    lambda callback:
+    callback.data
+    and callback.data.startswith(
+        "brothermenu:"
+    )
+)
+async def brother_menu_callback(
+    callback: CallbackQuery,
+):
+    choice = callback.data.split(":")[1]
+
+    await callback.answer()
+
+    if choice == "today":
+        await send_brother_today(
+            callback.message
+        )
+    else:
+        await send_brother_week(
+            callback.message
+        )
 
 @dp.message(Command("brotherweek"))
 async def brotherweek_handler(
