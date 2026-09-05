@@ -252,37 +252,10 @@ async def add_button_handler(
 ):
     await state.clear()
 
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="Сегодня",
-                    callback_data="taskdate:today",
-                ),
-                InlineKeyboardButton(
-                    text="Завтра",
-                    callback_data="taskdate:tomorrow",
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📅 Другая дата",
-                    callback_data="taskdate:custom",
-                ),
-            ],
-        ]
+    await show_list_choice(
+        message,
+        state,
     )
-
-    await state.set_state(
-        AddTaskForm.choosing_date
-    )
-
-    await message.answer(
-        "📅 На когда задача?",
-        reply_markup=keyboard,
-    )
-
-
 @dp.callback_query(
     AddTaskForm.choosing_date,
     lambda callback:
@@ -399,7 +372,6 @@ async def show_time_choice(
         reply_markup=keyboard,
     )
 
-
 @dp.callback_query(
     AddTaskForm.choosing_time,
     lambda callback:
@@ -417,9 +389,12 @@ async def choose_task_time(
             task_time=None
         )
 
-        await show_list_choice(
-            callback.message,
-            state,
+        await state.set_state(
+            AddTaskForm.entering_title
+        )
+
+        await callback.message.edit_text(
+            "✏️ Напиши название задачи:"
         )
 
     else:
@@ -434,7 +409,6 @@ async def choose_task_time(
         )
 
     await callback.answer()
-
 
 @dp.message(
     AddTaskForm.entering_time
@@ -463,9 +437,12 @@ async def custom_task_time(
         task_time=text
     )
 
-    await show_list_choice(
-        message,
-        state,
+    await state.set_state(
+        AddTaskForm.entering_title
+    )
+
+    await message.answer(
+        "✏️ Напиши название задачи:"
     )
 
 
@@ -475,14 +452,13 @@ async def show_list_choice(
 ):
     task_lists = await get_task_lists()
 
-    buttons = [
-        [
-            InlineKeyboardButton(
-                text="📌 Личное",
-                callback_data="tasklist:none",
-            )
-        ]
-    ]
+    icons = {
+        "Личные": "👤",
+        "По учёбе": "🎓",
+        "Студия": "🎬",
+    }
+
+    buttons = []
 
     for (
         list_id,
@@ -493,11 +469,16 @@ async def show_list_choice(
         if parent_id is not None:
             continue
 
+        if name not in icons:
+            continue
+
         buttons.append(
             [
                 InlineKeyboardButton(
-                    text=f"📂 {name}",
-                    callback_data=f"tasklist:{list_id}",
+                    text=f"{icons[name]} {name}",
+                    callback_data=(
+                        f"tasklist:{list_id}"
+                    ),
                 )
             ]
         )
@@ -514,8 +495,12 @@ async def show_list_choice(
         "📂 Куда добавить задачу?",
         reply_markup=keyboard,
     )
-
-
+@dp.callback_query(
+    AddTaskForm.choosing_list,
+    lambda callback:
+    callback.data
+    and callback.data.startswith("tasklist:")
+)
 @dp.callback_query(
     AddTaskForm.choosing_list,
     lambda callback:
@@ -526,28 +511,45 @@ async def choose_task_list(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    value = callback.data.split(":")[1]
-
-    if value == "none":
-        list_id = None
-    else:
-        list_id = int(value)
+    list_id = int(
+        callback.data.split(":")[1]
+    )
 
     await state.update_data(
         list_id=list_id
     )
 
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📅 Сегодня",
+                    callback_data="taskdate:today",
+                ),
+                InlineKeyboardButton(
+                    text="➡️ Завтра",
+                    callback_data="taskdate:tomorrow",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🗓 Другая дата",
+                    callback_data="taskdate:custom",
+                ),
+            ],
+        ]
+    )
+
     await state.set_state(
-        AddTaskForm.entering_title
+        AddTaskForm.choosing_date
     )
 
     await callback.message.edit_text(
-        "✏️ Напиши название задачи:"
+        "📅 На когда задача?",
+        reply_markup=keyboard,
     )
 
     await callback.answer()
-
-
 @dp.message(
     AddTaskForm.entering_title
 )
@@ -567,12 +569,35 @@ async def finish_new_task(
 
     task_date = data["task_date"]
     task_time = data.get("task_time")
-    list_id = data.get("list_id")
+    list_id = data["list_id"]
+
+    task_list = await get_task_list_by_id(
+        list_id
+    )
+
+    if not task_list:
+        await message.answer(
+            "❌ Список не найден."
+        )
+        await state.clear()
+        return
+
+    list_name = task_list[1]
+
+    category = {
+        "Личные": "Личное",
+        "По учёбе": "Учёба",
+        "Студия": "Студия",
+    }.get(
+        list_name,
+        list_name,
+    )
 
     await add_task(
         title=title,
         task_date=task_date,
         task_time=task_time,
+        category=category,
         list_id=list_id,
     )
 
@@ -580,6 +605,12 @@ async def finish_new_task(
         task_date,
         "%Y-%m-%d",
     ).date()
+
+    icons = {
+        "Личные": "👤",
+        "По учёбе": "🎓",
+        "Студия": "🎬",
+    }
 
     lines = [
         "✅ Задача создана",
@@ -592,14 +623,9 @@ async def finish_new_task(
             f"🕒 {task_time}"
         )
 
-    if list_id:
-        lines.append(
-            "📂 Добавлена в список"
-        )
-    else:
-        lines.append(
-            "📌 Личное"
-        )
+    lines.append(
+        f"{icons.get(list_name, '📂')} {list_name}"
+    )
 
     lines.append(
         f"☐ {title}"
@@ -1021,18 +1047,6 @@ async def open_list_callback(
                 text="➕ Добавить задачу",
                 callback_data=(
                     f"listadd:{current_list_id}"
-                ),
-            )
-        ]
-    )
-
-    buttons.append(
-        [
-            InlineKeyboardButton(
-                text="📁 Новый вложенный список",
-                callback_data=(
-                    f"newsublistbtn:"
-                    f"{current_list_id}"
                 ),
             )
         ]
