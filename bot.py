@@ -273,10 +273,15 @@ async def homework_message_handler(
     if source_date is None:
         source_date = now().date()
 
+    search_after_date = max(
+        source_date,
+        now().date(),
+    )
+
     next_lesson = (
         await find_next_omgtu_lesson(
             topic["schedule_names"],
-            source_date,
+            search_after_date,
         )
     )
 
