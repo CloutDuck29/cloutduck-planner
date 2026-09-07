@@ -550,6 +550,8 @@ async def ensure_default_task_lists():
         "Личные",
         "По учёбе",
         "Студия",
+        "ДЗ",
+
     ]
 
     async with aiosqlite.connect(DB_PATH) as db:

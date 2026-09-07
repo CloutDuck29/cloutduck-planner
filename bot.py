@@ -164,6 +164,19 @@ async def statistics_handler(
             "❌ Не удалось собрать статистику."
         )
 
+@dp.message(
+    lambda message:
+    message.text == "/topicid"
+)
+async def topic_id_handler(
+    message: Message,
+):
+    await message.answer(
+        "🔎 Данные темы:\n"
+        f"chat_id: {message.chat.id}\n"
+        f"thread_id: {message.message_thread_id}"
+    )
+
 # =====================================
 # START
 # =====================================
