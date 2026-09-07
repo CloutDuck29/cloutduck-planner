@@ -40,6 +40,7 @@ from database import (
     update_task,
 )
 
+from services.statistics import build_statistics_text
 from services.day_plan import get_day_plan
 
 from services.omgtu import (
@@ -131,11 +132,37 @@ main_keyboard = ReplyKeyboardMarkup(
             KeyboardButton(
                 text="📂 Списки"
             ),
+            KeyboardButton(
+                text="📊 Статистика"
+            ),
         ],
     ],
     resize_keyboard=True,
 )
 
+@dp.message(
+    lambda message:
+    message.text == "📊 Статистика"
+)
+async def statistics_handler(
+    message: Message,
+):
+    try:
+        text = await build_statistics_text(
+            now()
+        )
+
+        await message.answer(text)
+
+    except Exception as error:
+        print(
+            "Ошибка статистики:",
+            error,
+        )
+
+        await message.answer(
+            "❌ Не удалось собрать статистику."
+        )
 
 # =====================================
 # START
