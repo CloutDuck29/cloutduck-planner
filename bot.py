@@ -41,6 +41,11 @@ from database import (
 )
 
 from services.statistics import build_statistics_text
+from services.homework import (
+    extract_homework,
+    extract_lesson_date,
+    find_next_omgtu_lesson,
+)
 from services.day_plan import get_day_plan
 
 from services.omgtu import (
@@ -51,11 +56,11 @@ from services.omgtu import (
 from services.notifications import (
     send_morning_plan,
     send_tomorrow_plan,
+    send_homework_tomorrow,
     check_hour_before_reminders,
     check_omgtu_changes,
     send_once,
 )
-
 load_dotenv()
 
 TOKEN = os.getenv("BOT_TOKEN")
@@ -63,6 +68,64 @@ TIMEZONE = os.getenv(
     "TIMEZONE",
     "Asia/Omsk",
 )
+
+STUDY_CHAT_ID = -1004336656486
+
+STUDY_TOPICS = {
+    193: {
+        "short": "ЦГ",
+        "subject": "Цифровая грамотность",
+        "university": "ОмГТУ",
+        "schedule_names": [
+            "Цифровая грамотность",
+        ],
+    },
+    272: {
+        "short": "Математика",
+        "subject": "Математика",
+        "university": "ОмГТУ",
+        "schedule_names": [
+            "Математика",
+        ],
+    },
+    263: {
+        "short": "Физ-ра",
+        "subject": "Физкультура",
+        "university": "ОмГТУ",
+        "schedule_names": [
+            "Физическая культура",
+            "Физкультура",
+        ],
+    },
+    253: {
+        "short": "ИИКГ",
+        "subject": (
+            "Инженерная и компьютерная "
+            "графика"
+        ),
+        "university": "ОмГТУ",
+        "schedule_names": [
+            (
+                "Инженерная и компьютерная "
+                "графика"
+            ),
+        ],
+    },
+    180: {
+        "short": "ОРГ",
+        "subject": (
+            "Основы российской "
+            "государственности"
+        ),
+        "university": "ОмГТУ",
+        "schedule_names": [
+            (
+                "Основы российской "
+                "государственности"
+            ),
+        ],
+    },
+}
 
 if not TOKEN:
     raise RuntimeError(
@@ -177,6 +240,105 @@ async def topic_id_handler(
         f"thread_id: {message.message_thread_id}"
     )
 
+@dp.message(
+    lambda message:
+    message.chat.id == STUDY_CHAT_ID
+    and message.message_thread_id
+    in STUDY_TOPICS
+)
+@dp.message(
+    lambda message:
+    message.chat.id == STUDY_CHAT_ID
+    and message.message_thread_id
+    in STUDY_TOPICS
+)
+async def homework_message_handler(
+    message: Message,
+):
+    homework = extract_homework(
+        message.text
+    )
+
+    if homework is None:
+        return
+
+    topic = STUDY_TOPICS[
+        message.message_thread_id
+    ]
+
+    source_date = extract_lesson_date(
+        message.text
+    )
+
+    if source_date is None:
+        source_date = now().date()
+
+    next_lesson = (
+        await find_next_omgtu_lesson(
+            topic["schedule_names"],
+            source_date,
+        )
+    )
+
+    if next_lesson is not None:
+        task_date = next_lesson[
+            "date"
+        ].isoformat()
+
+        next_lesson_text = (
+            f"{next_lesson['date']:%d.%m.%Y}"
+        )
+
+        if next_lesson["time"]:
+            next_lesson_text += (
+                f" в {next_lesson['time']}"
+            )
+    else:
+        task_date = source_date.isoformat()
+        next_lesson_text = (
+            "не удалось определить"
+        )
+
+    task_lists = await get_task_lists()
+
+    homework_list_id = None
+
+    for (
+        list_id,
+        list_name,
+        parent_id,
+    ) in task_lists:
+        if list_name == "ДЗ":
+            homework_list_id = list_id
+            break
+
+    if homework_list_id is None:
+        homework_list_id = (
+            await create_task_list("ДЗ")
+        )
+
+    description = (
+        f"🎓 {topic['university']}\n"
+        f"📚 {topic['subject']}\n"
+        f"📝 Пара: {source_date:%d.%m.%Y}\n"
+        f"➡️ Следующая: "
+        f"{next_lesson_text}\n\n"
+        f"{homework}"
+    )
+
+    await add_task(
+        title=f"{topic['short']} — ДЗ",
+        task_date=task_date,
+        category="ДЗ",
+        list_id=homework_list_id,
+        description=description,
+    )
+
+    await message.reply(
+        "📚 ДЗ добавлено в CloutDuck.\n"
+        f"📅 Следующая пара: "
+        f"{next_lesson_text}"
+    )
 # =====================================
 # START
 # =====================================
@@ -2343,6 +2505,21 @@ async def tomorrow_plan_job():
             repr(error),
         )
 
+async def homework_tomorrow_job():
+
+    try:
+
+        await send_homework_tomorrow(
+            bot,
+            notification_now(),
+        )
+
+    except Exception as error:
+
+        print(
+            "Ошибка напоминания о ДЗ:",
+            repr(error),
+        )
 
 async def omgtu_check_job():
     try:
@@ -2399,6 +2576,15 @@ def setup_scheduler():
         hour=20,
         minute=5,
         id="tomorrow_plan",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        homework_tomorrow_job,
+        trigger="cron",
+        hour=20,
+        minute=10,
+        id="homework_tomorrow",
         replace_existing=True,
     )
 # =====================================

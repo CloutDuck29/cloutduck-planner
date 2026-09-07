@@ -10,6 +10,7 @@ from database import (
     get_omgtu_snapshot,
     save_omgtu_snapshot,
     get_tasks_for_date,
+    get_homework_tasks_for_date,
 )
 
 from services.day_plan import get_day_plan
@@ -165,6 +166,64 @@ async def send_tomorrow_plan(
         now_dt.isoformat(),
     )
 
+# =====================================
+# ДЗ НА ЗАВТРА
+# =====================================
+
+async def send_homework_tomorrow(
+    bot: Bot,
+    now_dt: datetime,
+):
+    target_day = (
+        now_dt.date()
+        + timedelta(days=1)
+    )
+
+    tasks = (
+        await get_homework_tasks_for_date(
+            target_day.isoformat()
+        )
+    )
+
+    if not tasks:
+        return
+
+    key = make_notification_key(
+        "homework_tomorrow",
+        target_day,
+    )
+
+    if await was_notification_sent(key):
+        return
+
+    chat_id = await get_chat_id()
+
+    if not chat_id:
+        return
+
+    lines = [
+        "📚 ДЗ НА ЗАВТРА",
+        "",
+    ]
+
+    for (
+        task_id,
+        title,
+        description,
+    ) in tasks:
+        lines.append(
+            f"• {title}"
+        )
+
+    await bot.send_message(
+        chat_id=chat_id,
+        text="\n".join(lines),
+    )
+
+    await mark_notification_sent(
+        key,
+        now_dt.isoformat(),
+    )
 
 # =====================================
 # НАПОМИНАНИЯ ЗА ЧАС

@@ -254,6 +254,28 @@ async def get_tasks_for_list(
 
         return await cursor.fetchall()
 
+async def get_homework_tasks_for_date(
+    task_date: str,
+):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """
+            SELECT
+                id,
+                title,
+                description
+            FROM tasks
+            WHERE
+                task_date = ?
+                AND category = 'ДЗ'
+                AND is_done = 0
+            ORDER BY id
+            """,
+            (task_date,),
+        )
+
+        return await cursor.fetchall()
+
 async def get_task_by_id(
     task_id: int,
 ):
