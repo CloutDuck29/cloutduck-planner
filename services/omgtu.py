@@ -100,20 +100,22 @@ def is_brother_subgroup(
         for value in lesson.values()
     ).upper()
 
-    # Явно чужая 2-я подгруппа МР-261
-    if "МР-261/2" in lesson_text:
+    # Немецкий брату не нужен
+    if "НЕМ ЯЗ" in lesson_text:
+        return False
+
+    # Первая подгруппа МР-261 брату не нужна
+    if "МР-261/1" in lesson_text:
         return False
 
     subgroup = str(
         lesson.get("subGroup") or ""
     ).strip()
 
-    # Если у пары указана подгруппа,
-    # брату нужна только МР-261/1
     if subgroup:
         if (
-            subgroup == "2"
-            or subgroup.endswith("/2")
+            subgroup == "1"
+            or subgroup.endswith("/1")
         ):
             return False
 
