@@ -92,6 +92,33 @@ def is_our_subgroup(lesson: dict) -> bool:
     return True
 
 
+def is_brother_subgroup(
+    lesson: dict,
+) -> bool:
+    lesson_text = " ".join(
+        str(value or "")
+        for value in lesson.values()
+    ).upper()
+
+    # Явно чужая 2-я подгруппа МР-261
+    if "МР-261/2" in lesson_text:
+        return False
+
+    subgroup = str(
+        lesson.get("subGroup") or ""
+    ).strip()
+
+    # Если у пары указана подгруппа,
+    # брату нужна только МР-261/1
+    if subgroup:
+        if (
+            subgroup == "2"
+            or subgroup.endswith("/2")
+        ):
+            return False
+
+    return True
+
 async def get_week_schedule(
     group_name: str,
     any_day: date,
@@ -122,11 +149,29 @@ async def get_my_schedule(any_day: date) -> list[dict]:
     )
 
 
-async def get_brother_schedule(any_day: date) -> list[dict]:
-    return await get_week_schedule(
-        BROTHER_GROUP,
-        any_day,
+async def get_brother_schedule(
+    any_day: date,
+) -> list[dict]:
+
+    monday = any_day - timedelta(
+        days=any_day.weekday()
     )
+
+    sunday = monday + timedelta(
+        days=6
+    )
+
+    schedule = await fetch_group_schedule(
+        BROTHER_GROUP,
+        monday,
+        sunday,
+    )
+
+    return [
+        lesson
+        for lesson in schedule
+        if is_brother_subgroup(lesson)
+    ]
 
 
 def parse_lesson_date(value: str) -> date:

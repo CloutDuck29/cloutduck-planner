@@ -125,6 +125,30 @@ STUDY_TOPICS = {
             ),
         ],
     },
+    309: {
+        "short": "ИнЯз",
+        "subject": "Иностранный язык",
+        "university": "ОмГТУ",
+        "schedule_names": [
+            "Иностранный язык",
+        ],
+    },
+    304: {
+        "short": "Информатика",
+        "subject": "Информатика",
+        "university": "ОмГТУ",
+        "schedule_names": [
+            "Информатика",
+        ],
+    },
+    316: {
+        "short": "ПроектДеят",
+        "subject": "Проектная деятельность",
+        "university": "ОмГТУ",
+        "schedule_names": [
+            "Проектная деятельность",
+        ],
+    },
 }
 
 if not TOKEN:
