@@ -209,7 +209,8 @@ main_keyboard = ReplyKeyboardMarkup(
         ],
         [
             KeyboardButton(
-                text="🗓 По датам"
+                text="📆 По датам"
+
             ),
             KeyboardButton(
                 text="👨 Брат"
