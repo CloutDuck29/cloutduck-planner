@@ -209,7 +209,7 @@ main_keyboard = ReplyKeyboardMarkup(
         ],
         [
             KeyboardButton(
-                text="🗓 Недели"
+                text="🗓 По датам"
             ),
             KeyboardButton(
                 text="👨 Брат"
@@ -382,22 +382,19 @@ async def start_handler(
 
     await message.answer(
         "🦆 CloutDuck Planner\n\n"
-        "Можно пользоваться кнопками снизу "
-        "или командами:\n\n"
-        "/today — сегодня\n"
-        "/tomorrow — завтра\n"
-        "/week — текущая неделя\n"
-        "/nextweek — следующая неделя\n"
-        "/brother — брат сегодня\n"
-        "/brotherweek — брат на неделю\n"
-        "/add — добавить задачу\n"
-	"/adddate — задача на будущую дату\n"
-	"/newlist — создать список\n"
-	"/lists — показать списки\n"
-	"/newsublist — вложенный список\n"
-	"/addtolist — добавить задачу в список\n"
-	"/subtask — создать подзадачу\n"
-	"/list — открыть список\n",
+        "Основное управление — кнопками снизу.\n\n"
+        "⌨️ Команды:\n"
+        "/today — план на сегодня\n"
+        "/tomorrow — план на завтра\n"
+        "/brother — расписание брата сегодня\n"
+        "/add — быстро добавить задачу\n"
+        "/adddate — добавить задачу на дату\n"
+        "/lists — показать списки\n"
+        "/newlist — создать список\n"
+        "/newsublist — создать вложенный список\n"
+        "/addtolist — добавить задачу в список\n"
+        "/subtask — создать подзадачу\n"
+        "/list — открыть список по ID",
         reply_markup=main_keyboard,
     )
 
@@ -1948,142 +1945,112 @@ async def tomorrow_button_handler(
 ):
     await send_tomorrow(message)
 
-@dp.message(
-    lambda message:
-    message.text == "🗓 Недели"
-)
-async def weeks_menu_handler(
-    message: Message,
-):
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="🗓 Текущая неделя",
-                    callback_data="weekmenu:current",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="⏭ Следующая неделя",
-                    callback_data="weekmenu:next",
-                )
-            ],
-        ]
-    )
-
-    await message.answer(
-        "🗓 Какую неделю показать?",
-        reply_markup=keyboard,
-    )
-
 # =====================================
-# ТЕКУЩАЯ НЕДЕЛЯ
+# РАСПИСАНИЕ ПО ДАТАМ
 # =====================================
 
-async def send_week(
-    message: Message,
-    next_week: bool = False,
-):
-    today = now().date()
+SHORT_WEEKDAYS = {
+    0: "Пн",
+    1: "Вт",
+    2: "Ср",
+    3: "Чт",
+    4: "Пт",
+    5: "Сб",
+    6: "Вс",
+}
 
-    monday = (
-        today
-        - timedelta(
-            days=today.weekday()
-        )
+
+def build_dates_keyboard(
+    prefix: str,
+):
+    start_day = (
+        now().date()
+        + timedelta(days=2)
     )
 
-    if next_week:
-        monday += timedelta(days=7)
+    buttons = []
 
-    for offset in range(7):
+    for offset in range(14):
         target_day = (
-            monday
+            start_day
             + timedelta(days=offset)
         )
 
-        text = await get_day_plan(
-            target_day
+        weekday = SHORT_WEEKDAYS[
+            target_day.weekday()
+        ]
+
+        button = InlineKeyboardButton(
+            text=(
+                f"{target_day.strftime('%d.%m')} "
+                f"({weekday})"
+            ),
+            callback_data=(
+                f"{prefix}:"
+                f"{target_day.isoformat()}"
+            ),
         )
 
-        await message.answer(text)
+        if offset % 2 == 0:
+            buttons.append([button])
+        else:
+            buttons[-1].append(button)
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=buttons
+    )
+
+
+@dp.message(
+    lambda message:
+    message.text == "📆 По датам"
+)
+async def dates_menu_handler(
+    message: Message,
+):
+    await message.answer(
+        "📆 Выбери дату:",
+        reply_markup=build_dates_keyboard(
+            "date"
+        ),
+    )
 
 
 @dp.callback_query(
     lambda callback:
     callback.data
-    and callback.data.startswith("weekmenu:")
+    and callback.data.startswith("date:")
 )
-async def week_menu_callback(
+async def date_callback(
     callback: CallbackQuery,
 ):
-    choice = callback.data.split(":")[1]
+    date_text = callback.data.split(
+        ":",
+        1,
+    )[1]
+
+    target_day = datetime.strptime(
+        date_text,
+        "%Y-%m-%d",
+    ).date()
 
     await callback.answer()
 
-    await send_week(
-        callback.message,
-        next_week=(
-            choice == "next"
-        ),
+    text = await get_day_plan(
+        target_day
     )
 
-@dp.message(Command("week"))
-async def week_handler(
-    message: Message
-):
-    await send_week(
-        message,
-        next_week=False,
+    keyboard = await get_task_keyboard(
+        target_day
     )
 
-
-@dp.message(
-    lambda message:
-    message.text == "🗓 Неделя"
-)
-async def week_button_handler(
-    message: Message
-):
-    await send_week(
-        message,
-        next_week=False,
+    await callback.message.answer(
+        text,
+        reply_markup=keyboard,
     )
-
-
-# =====================================
-# СЛЕДУЮЩАЯ НЕДЕЛЯ
-# =====================================
-
-@dp.message(Command("nextweek"))
-async def nextweek_handler(
-    message: Message
-):
-    await send_week(
-        message,
-        next_week=True,
-    )
-
-
-@dp.message(
-    lambda message:
-    message.text
-    == "⏭ Следующая неделя"
-)
-async def nextweek_button_handler(
-    message: Message
-):
-    await send_week(
-        message,
-        next_week=True,
-    )
-
-
 # =====================================
 # РАСПИСАНИЕ БРАТА
 # =====================================
-
 @dp.message(
     lambda message:
     message.text == "👨 Брат"
@@ -2095,14 +2062,18 @@ async def brother_menu_handler(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="👨 Брат сегодня",
+                    text="📅 Сегодня",
                     callback_data="brothermenu:today",
-                )
+                ),
+                InlineKeyboardButton(
+                    text="➡️ Завтра",
+                    callback_data="brothermenu:tomorrow",
+                ),
             ],
             [
                 InlineKeyboardButton(
-                    text="🗓 Брат неделя",
-                    callback_data="brothermenu:week",
+                    text="📆 По датам",
+                    callback_data="brothermenu:dates",
                 )
             ],
         ]
@@ -2239,32 +2210,23 @@ async def brother_button_handler(
 
 
 # =====================================
-# БРАТ — НЕДЕЛЯ
+# БРАТ — ЗАВТРА И ПО ДАТАМ
 # =====================================
 
-async def send_brother_week(
-    message: Message
+async def send_brother_tomorrow(
+    message: Message,
 ):
-    today = now().date()
-
-    monday = (
-        today
-        - timedelta(
-            days=today.weekday()
-        )
+    target_day = (
+        now().date()
+        + timedelta(days=1)
     )
 
-    for offset in range(7):
-        target_day = (
-            monday
-            + timedelta(days=offset)
-        )
+    text = await get_brother_day_text(
+        target_day
+    )
 
-        text = await get_brother_day_text(
-            target_day
-        )
+    await message.answer(text)
 
-        await message.answer(text)
 
 @dp.callback_query(
     lambda callback:
@@ -2284,31 +2246,48 @@ async def brother_menu_callback(
         await send_brother_today(
             callback.message
         )
-    else:
-        await send_brother_week(
+
+    elif choice == "tomorrow":
+        await send_brother_tomorrow(
             callback.message
         )
 
-@dp.message(Command("brotherweek"))
-async def brotherweek_handler(
-    message: Message
-):
-    await send_brother_week(
-        message
+    elif choice == "dates":
+        await callback.message.answer(
+            "📆 Выбери дату:",
+            reply_markup=build_dates_keyboard(
+                "brotherdate"
+            ),
+        )
+
+
+@dp.callback_query(
+    lambda callback:
+    callback.data
+    and callback.data.startswith(
+        "brotherdate:"
     )
-
-
-@dp.message(
-    lambda message:
-    message.text
-    == "👨 Брат неделя"
 )
-async def brotherweek_button_handler(
-    message: Message
+async def brother_date_callback(
+    callback: CallbackQuery,
 ):
-    await send_brother_week(
-        message
+    date_text = callback.data.split(
+        ":",
+        1,
+    )[1]
+
+    target_day = datetime.strptime(
+        date_text,
+        "%Y-%m-%d",
+    ).date()
+
+    await callback.answer()
+
+    text = await get_brother_day_text(
+        target_day
     )
+
+    await callback.message.answer(text)
 
 # =====================================
 # КНОПКИ ЗАДАЧ В ПЛАНЕ
