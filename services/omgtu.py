@@ -91,6 +91,38 @@ def is_our_subgroup(lesson: dict) -> bool:
 
     return True
 
+def is_my_visible_subject(
+    lesson: dict,
+) -> bool:
+    """
+    До 01.01.2027 скрываем ненужные
+    дисциплины из моего расписания.
+    """
+
+    lesson_day = parse_lesson_date(
+        lesson["date"]
+    )
+
+    if lesson_day >= date(2027, 1, 1):
+        return True
+
+    discipline = str(
+        lesson.get("discipline") or ""
+    ).strip().lower()
+
+    hidden_subjects = (
+        "математика",
+        "основы российской государственности",
+        "иностранный язык",
+        "физическая культура",
+        "цифровая грамотность",
+    )
+
+    return not any(
+        subject in discipline
+        for subject in hidden_subjects
+    )
+
 
 def is_brother_subgroup(
     lesson: dict,
@@ -140,7 +172,10 @@ async def get_week_schedule(
     return [
         lesson
         for lesson in schedule
-        if is_our_subgroup(lesson)
+        if (
+            is_our_subgroup(lesson)
+            and is_my_visible_subject(lesson)
+        )
     ]
 
 
@@ -172,7 +207,7 @@ async def get_brother_schedule(
     return [
         lesson
         for lesson in schedule
-        if is_brother_subgroup(lesson)
+        if is_our_subgroup(lesson)
     ]
 
 
