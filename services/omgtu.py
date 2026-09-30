@@ -207,7 +207,7 @@ async def get_brother_schedule(
     return [
         lesson
         for lesson in schedule
-        if is_our_subgroup(lesson)
+        if is_brother_subgroup(lesson)
     ]
 
 
