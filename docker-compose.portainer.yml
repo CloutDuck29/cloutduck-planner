@@ -1,6 +1,6 @@
 services:
   cloutduck-planner:
-    image: ghcr.io/cloutduck29/cloutduck-planner:sha-227cd59
+    image: ghcr.io/cloutduck29/cloutduck-planner:sha-ca633dc
     container_name: cloutduck-planner
 
     restart: unless-stopped
