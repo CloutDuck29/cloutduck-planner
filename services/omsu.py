@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from data.omsu_schedule import OMSU_SCHEDULE
+from schedules.omsu_schedule import OMSU_SCHEDULE
 
 
 def get_omsu_events(target_date: date) -> list[dict]:

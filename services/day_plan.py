@@ -1,6 +1,6 @@
 from datetime import date
 
-from data.omgtu_buildings import OMGTU_BUILDINGS
+from schedules.omgtu_buildings import OMGTU_BUILDINGS
 from database import get_tasks_for_date
 
 from services.omgtu import (

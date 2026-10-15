@@ -1,7 +1,7 @@
 from collections import Counter
 from datetime import date, datetime, timedelta
 
-from data.omsu_schedule import OMSU_SCHEDULE
+from schedules.omsu_schedule import OMSU_SCHEDULE
 from services.gym_planner import (
     FIXED_GYM_DAYS,
     AUTO_GYM_START,
