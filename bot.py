@@ -681,7 +681,6 @@ async def show_list_choice(
     icons = {
         "Личные": "👤",
         "По учёбе": "🎓",
-        "Студия": "🎬",
     }
 
     buttons = []
@@ -807,7 +806,6 @@ async def finish_new_task(
     category = {
         "Личные": "Личное",
         "По учёбе": "Учёба",
-        "Студия": "Студия",
     }.get(
         list_name,
         list_name,
@@ -829,7 +827,6 @@ async def finish_new_task(
     icons = {
         "Личные": "👤",
         "По учёбе": "🎓",
-        "Студия": "🎬",
     }
 
     lines = [
@@ -982,7 +979,7 @@ async def newlist_handler(
     if not name:
         await message.answer(
             "Формат:\n"
-            "/newlist Студия"
+            "/newlist Мой список"
         )
         return
 
@@ -1060,13 +1057,12 @@ async def lists_button_handler(
         parent_id,
     ) in task_lists:
 
-        if parent_id is not None:
+        if parent_id is not None or name == "Студия":
             continue
 
         button_text = {
             "Личные": "👤 Личные",
             "По учёбе": "🎓 По учёбе",
-            "Студия": "🎬 Студия",
         }.get(
             name,
             f"📂 {name}",
@@ -1181,7 +1177,6 @@ async def open_list_callback(
     icon = {
         "Личные": "👤",
         "По учёбе": "🎓",
-        "Студия": "🎬",
     }.get(
         list_name,
         "📂",
@@ -1520,13 +1515,12 @@ async def back_to_lists_callback(
         parent_id,
     ) in task_lists:
 
-        if parent_id is not None:
+        if parent_id is not None or name == "Студия":
             continue
 
         button_text = {
             "Личные": "👤 Личные",
             "По учёбе": "🎓 По учёбе",
-            "Студия": "🎬 Студия",
         }.get(
             name,
             f"📂 {name}",
@@ -2914,7 +2908,6 @@ async def save_list_task(
     category = {
         "Личные": "Личное",
         "По учёбе": "Учёба",
-        "Студия": "Студия",
     }.get(
         list_name,
         list_name,
