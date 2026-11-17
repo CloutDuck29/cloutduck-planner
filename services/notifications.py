@@ -373,14 +373,6 @@ async def check_hour_before_reminders(
                 f"{event['title']}"
             )
 
-        elif category == "Зал":
-            emoji = "🏋️"
-            text = (
-                "🏋️ Через час зал\n\n"
-                f"{event['time']} — "
-                "Тренировка"
-            )
-
         else:
             continue
 

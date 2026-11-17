@@ -569,7 +569,6 @@ async def delete_task(
 
 async def ensure_default_task_lists():
     default_lists = [
-        "Личные",
         "По учёбе",
         "ДЗ",
 

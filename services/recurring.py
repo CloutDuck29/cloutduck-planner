@@ -1,10 +1,5 @@
 from datetime import date
 
-from services.gym_planner import (
-    is_auto_gym_day,
-)
-
-
 async def get_recurring_events(
     day: date,
 ) -> list[dict]:
@@ -39,18 +34,9 @@ async def get_recurring_events(
     # ЗАЛ
     # =====================================
 
-    # Даты зала теперь определяет
-    # gym_planner.py автоматически.
-    if await is_auto_gym_day(day):
-        events.append(
-            {
-                "time": "20:40",
-                "title": "Зал",
-                "category": "Зал",
-                "emoji": "🏋️",
-                "kind": "event",
-            }
-        )
+    # ЗАЛ — временно отключён до следующего семестра.
+    # Алгоритм автоматического подбора сохранён
+    # в services/gym_planner.py.
 
     events.sort(
         key=lambda event: event["time"]

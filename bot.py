@@ -1057,7 +1057,7 @@ async def lists_button_handler(
         parent_id,
     ) in task_lists:
 
-        if parent_id is not None or name == "Студия":
+        if parent_id is not None or name in ("Студия", "Личные"):
             continue
 
         button_text = {
@@ -1515,11 +1515,10 @@ async def back_to_lists_callback(
         parent_id,
     ) in task_lists:
 
-        if parent_id is not None or name == "Студия":
+        if parent_id is not None or name in ("Студия", "Личные"):
             continue
 
         button_text = {
-            "Личные": "👤 Личные",
             "По учёбе": "🎓 По учёбе",
         }.get(
             name,

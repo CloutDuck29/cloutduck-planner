@@ -196,12 +196,6 @@ async def get_day_plan(
         == "Китайский"
     ]
 
-    gym_events = [
-        event
-        for event in recurring_events
-        if event["category"]
-        == "Зал"
-    ]
 
     if chinese_events:
         lines.append("")
@@ -215,17 +209,6 @@ async def get_day_plan(
                 f"{event['title']}"
             )
 
-    if gym_events:
-        lines.append("")
-        lines.append(
-            "🏋️ ЗАЛ"
-        )
-
-        for event in gym_events:
-            lines.append(
-                f"{event['time']} — "
-                "Тренировка"
-            )
 
     # =================================
     # ЗАДАЧИ
